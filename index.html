@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>演唱會控台 - v46 鎖定功能修復版</title>
+    <title>AD良伴_v2.2</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root { 
@@ -49,13 +49,20 @@
         .cue-name { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 8px; border-radius: 4px; width: 100%; font-size: 1.1rem; box-sizing: border-box; outline: none; }
         .cue-note { width: 100%; background: rgba(0,0,0,0.3); border: 1px dashed rgba(255,255,255,0.2); color: #ccc; font-size: 0.9rem; padding: 8px; border-radius: 4px; outline: none; box-sizing: border-box; resize: none; overflow: hidden; margin-top: 8px; min-height: 45px;}
 
-        /* 下拉選單 + 打字 混合樣式 */
+        /* 下拉選單 + 打字 混合樣式優化 */
         .duration-picker { display: flex; align-items: center; background: #222; border: 1px solid #666; border-radius: 8px; padding: 0 4px; }
         .time-unit { display: flex; align-items: center; position: relative; }
         .time-input-box { background: transparent; color: #fff; border: none; font-size: 1.1rem; font-family: monospace; width: 30px; text-align: center; padding: 8px 0; font-weight: bold; outline: none; }
         .time-input-box:disabled { color: #555; }
-        .time-select-trigger { background: transparent; color: #666; border: none; font-size: 0.6rem; padding: 0 2px; cursor: pointer; -webkit-appearance: none; }
-        .time-select-trigger:disabled { opacity: 0.2; pointer-events: none; }
+        
+        /* 隱藏原生選單文字，只留 icon */
+        .time-select-wrapper { position: relative; width: 14px; height: 30px; display: flex; align-items: center; justify-content: center; }
+        .time-select-wrapper::after { content: "▾"; font-size: 0.8rem; color: #666; pointer-events: none; }
+        .time-select-trigger { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            opacity: 0; cursor: pointer; -webkit-appearance: none; 
+        }
+        .is-locked .time-select-wrapper::after { opacity: 0.2; }
 
         .type-select { background: #222; color: #fff; border: 1px solid #666; padding: 8px 4px; border-radius: 8px; font-size: 0.85rem; -webkit-appearance: none; outline: none; }
         
@@ -98,7 +105,7 @@
 <script>
     let songCountdowns = {}; let actualStartTimes = {}; let lastActiveId = null;
     let globalSortEnabled = false; let sortInstance;
-    const CURRENT_STORAGE_KEY = 'concert_app_v46';
+    const CURRENT_STORAGE_KEY = 'concert_app_v47';
 
     setInterval(updateClock, 1000);
 
@@ -149,12 +156,16 @@
                     <div class="duration-picker">
                         <div class="time-unit">
                             <input type="number" class="time-input-box min-input" value="${initialMin}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
-                            <select class="time-select-trigger" onchange="this.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(61)}</select>
+                            <div class="time-select-wrapper">
+                                <select class="time-select-trigger" onchange="this.parentElement.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(61)}</select>
+                            </div>
                         </div>
                         <span style="color:#666; font-weight:bold;">:</span>
                         <div class="time-unit">
                             <input type="number" class="time-input-box sec-input" value="${initialSec}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
-                            <select class="time-select-trigger" onchange="this.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(60)}</select>
+                            <div class="time-select-wrapper">
+                                <select class="time-select-trigger" onchange="this.parentElement.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(60)}</select>
+                            </div>
                         </div>
                     </div>
                     <button class="btn" style="background:none; color:#ff9500; font-size:1.2rem; padding:0 2px;" onclick="toggleLock('${id}')" id="lock-btn-${id}">${data?.locked ? '🔒' : '🔓'}</button>
@@ -174,14 +185,8 @@
     function toggleLock(id) {
         const card = document.getElementById(`card-${id}`);
         const isLocked = card.classList.toggle('is-locked');
-        const btn = document.getElementById(`lock-btn-${id}`);
-        
-        // 禁用/啟用所有輸入元件
-        card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => {
-            el.disabled = isLocked;
-        });
-        
-        btn.innerText = isLocked ? '🔒' : '🔓';
+        card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => el.disabled = isLocked);
+        document.getElementById(`lock-btn-${id}`).innerText = isLocked ? '🔒' : '🔓';
         saveData();
     }
 
@@ -190,8 +195,6 @@
         clearInterval(songCountdowns[id]); 
         document.getElementById(`start-btn-${id}`).classList.remove('running'); 
         document.getElementById(`end-btn-${id}`).classList.add('ended'); 
-        
-        // 如果沒被鎖定，才自動更新時間
         if (actualStartTimes[id] && !card.classList.contains('is-locked')) { 
             const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000);
             card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0');
@@ -211,7 +214,6 @@
         while ((match = timePattern.exec(noteText)) !== null) { 
             cuePoints.push({ targetSec: parseInt(match[1]) * 60 + parseInt(match[2]), desc: (match[3] || "CUE") }); 
         }
-        
         songCountdowns[id] = setInterval(() => {
             const m = parseInt(card.querySelector('.min-input').value || 0);
             const s = parseInt(card.querySelector('.sec-input').value || 0);
@@ -220,7 +222,6 @@
             let left = totalSecs - elapsed;
             mainCd.innerText = (left < 0 ? "-" : "") + `${Math.floor(Math.abs(left)/60).toString().padStart(2, '0')}:${(Math.abs(left)%60).toString().padStart(2, '0')}`;
             mainCd.style.color = left < 0 ? "var(--red)" : (left <= 10 ? "var(--warning)" : "#fff");
-
             let cueHtml = "";
             cuePoints.forEach(cp => {
                 let d = cp.targetSec - elapsed;
@@ -255,30 +256,15 @@
     function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
     function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; saveData(); }
     function triggerStart(btn, id) { if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); lastActiveId = id; actualStartTimes[id] = new Date(); document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); document.getElementById(`card-${id}`).classList.add('active'); btn.classList.add('running'); startCountdown(id); recalculateAll(); }
-    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
+    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(h, m, 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
     function updateCardType(id, type) { document.getElementById(`card-${id}`).setAttribute('data-type', type); saveData(); }
     function autoGrow(el) { el.style.height = "5px"; el.style.height = (el.scrollHeight) + "px"; }
     function manualSave() { saveData(); const btn = document.getElementById('save-hint-btn'); btn.innerText = "SAVED!"; setTimeout(() => btn.innerText = "SAVE", 1500); }
     function resetData() { if(confirm("確定重設？")) { localStorage.clear(); location.reload(); } }
     function removeRow(id) { if(confirm("確定刪除？")) { document.getElementById(`card-${id}`).remove(); recalculateAll(); saveData(); } }
     function toggleSkip(id) { document.getElementById(`card-${id}`).classList.toggle('is-skipped'); recalculateAll(); saveData(); }
-    function saveData() {
-        const data = { title: document.getElementById('main-title').value, target: document.getElementById('target-end-time').value, items: [] };
-        document.querySelectorAll('.cue-card').forEach(card => {
-            const id = card.id.replace('card-', '');
-            data.items.push({ id: id, name: card.querySelector('.cue-name').value, type: card.getAttribute('data-type'), duration: `${card.querySelector('.min-input').value}:${card.querySelector('.sec-input').value}`, note: card.querySelector('.cue-note').value, locked: card.classList.contains('is-locked'), skipped: card.classList.contains('is-skipped') });
-        });
-        localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data));
-    }
-    function loadData() {
-        const list = document.getElementById('cue-list'); list.innerHTML = "";
-        let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v45');
-        if (raw) {
-            const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target;
-            data.items.forEach(item => addRow(item));
-        } else { for(let i=0; i<5; i++) addRow(); }
-        initSortable();
-    }
+    function saveData() { const data = { title: document.getElementById('main-title').value, target: document.getElementById('target-end-time').value, items: [] }; document.querySelectorAll('.cue-card').forEach(card => { const id = card.id.replace('card-', ''); data.items.push({ id: id, name: card.querySelector('.cue-name').value, type: card.getAttribute('data-type'), duration: `${card.querySelector('.min-input').value}:${card.querySelector('.sec-input').value}`, note: card.querySelector('.cue-note').value, locked: card.classList.contains('is-locked'), skipped: card.classList.contains('is-skipped') }); }); localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data)); }
+    function loadData() { const list = document.getElementById('cue-list'); list.innerHTML = ""; let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v46'); if (raw) { const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target; data.items.forEach(item => addRow(item)); } else { for(let i=0; i<5; i++) addRow(); } initSortable(); }
     window.onload = loadData;
 </script>
 </body>
