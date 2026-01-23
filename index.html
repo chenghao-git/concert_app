@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>演唱會控台 - v50 全域重設計時版</title>
+    <title>演唱會控台 - v51 匯入優化修正版</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root { 
@@ -110,41 +110,9 @@
 <script>
     let songCountdowns = {}; let actualStartTimes = {}; let lastActiveId = null;
     let globalSortEnabled = false; let sortInstance;
-    const CURRENT_STORAGE_KEY = 'concert_app_v50';
+    const CURRENT_STORAGE_KEY = 'concert_app_v51';
 
     setInterval(updateClock, 1000);
-
-    // --- 全域計時器歸零功能 ---
-    function zeroAllTimers() {
-        if(!confirm("確定要將所有進行中的計時器歸零嗎？這不會刪除歌單內容。")) return;
-        
-        // 停止所有定時器
-        Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key]));
-        songCountdowns = {};
-        actualStartTimes = {};
-        lastActiveId = null;
-
-        // 重設 UI 狀態
-        document.querySelectorAll('.cue-card').forEach(card => {
-            card.classList.remove('active');
-            const id = card.id.replace('card-', '');
-            const mainCd = document.getElementById(`cd-val-${id}`);
-            const cueContainer = document.getElementById(`cue-timers-container-${id}`);
-            const sTag = card.querySelector('.start-tag');
-            const eTag = card.querySelector('.end-tag');
-            
-            if(mainCd) { mainCd.innerText = "--:--"; mainCd.style.color = "#fff"; }
-            if(cueContainer) cueContainer.innerHTML = "";
-            if(sTag) sTag.innerText = "S: --:--:--";
-            if(eTag) eTag.innerText = "E: --:--:--";
-        });
-
-        // 恢復按鈕外觀
-        document.querySelectorAll('.btn-start').forEach(b => b.classList.remove('running'));
-        document.querySelectorAll('.btn-end').forEach(b => b.classList.remove('ended'));
-        
-        recalculateAll();
-    }
 
     function genOptions(max) {
         let h = ""; for(let i=0; i<max; i++) { let v = i.toString().padStart(2, '0'); h += `<option value="${v}">${v}</option>`; }
@@ -156,7 +124,7 @@
         const card = document.createElement('div');
         card.className = `cue-card ${data?.locked ? 'is-locked' : ''} ${data?.skipped ? 'is-skipped' : ''}`;
         card.id = `card-${id}`; card.setAttribute('data-type', data?.type || 'song');
-        let initialMin = data?.duration ? data.duration.split(':')[0] : "00";
+        let initialMin = data?.duration ? data.duration.split(':')[0] : "05";
         let initialSec = data?.duration ? data.duration.split(':')[1] : "00";
 
         card.innerHTML = `
@@ -171,7 +139,7 @@
                         </div>
                     </div>
                     <input type="text" value="${data?.name || '項目名稱'}" class="cue-name" oninput="saveData()">
-                    <textarea class="cue-note" placeholder="00:00 內容" oninput="autoGrow(this); saveData();">${data?.note || ''}</textarea>
+                    <textarea class="cue-note" placeholder="筆記..." oninput="autoGrow(this); saveData();">${data?.note || ''}</textarea>
                 </div>
                 <div class="right-clock">
                     <div><span id="cd-val-${id}" class="timer-val">--:--</span></div>
@@ -211,8 +179,44 @@
                 </div>
             </div>`;
         document.getElementById('cue-list').appendChild(card);
-        const minS = card.querySelector('.min-select'); const secS = card.querySelector('.sec-select');
+        const minS = card.querySelector('.min-input'); const secS = card.querySelector('.sec-input');
         minS.value = initialMin.padStart(2,'0'); secS.value = initialSec.padStart(2,'0');
+        recalculateAll();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (confirm("這將會清空現有歌單並匯入新資料，確定嗎？")) {
+                    // 核心修正：匯入前先物理清空 DOM
+                    document.getElementById('cue-list').innerHTML = "";
+                    localStorage.setItem(CURRENT_STORAGE_KEY, e.target.result);
+                    // 重新加載資料以確保 ID 與排序功能正確
+                    loadData();
+                }
+            } catch (err) { alert("檔案格式錯誤！"); }
+        };
+        reader.readAsText(file);
+    }
+
+    function zeroAllTimers() {
+        if(!confirm("將計時器歸零？")) return;
+        Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key]));
+        songCountdowns = {}; actualStartTimes = {}; lastActiveId = null;
+        document.querySelectorAll('.cue-card').forEach(card => {
+            card.classList.remove('active');
+            const id = card.id.replace('card-', '');
+            const mainCd = document.getElementById(`cd-val-${id}`);
+            const cueContainer = document.getElementById(`cue-timers-container-${id}`);
+            if(mainCd) { mainCd.innerText = "--:--"; mainCd.style.color = "#fff"; }
+            if(cueContainer) cueContainer.innerHTML = "";
+        });
+        document.querySelectorAll('.btn-start').forEach(b => b.classList.remove('running'));
+        document.querySelectorAll('.btn-end').forEach(b => b.classList.remove('ended'));
         recalculateAll();
     }
 
@@ -236,7 +240,7 @@
                 const endTime = new Date(rollingStartTime.getTime() + dSec * 1000); 
                 eTag.innerText = "E: " + endTime.toTimeString().split(' ')[0]; 
                 rollingStartTime = endTime; finalEndTime = endTime; 
-            }
+            } else { sTag.innerText = "S: --:--:--"; eTag.innerText = "E: --:--:--"; }
         });
         if (finalEndTime) {
             const target = new Date(); const [h, m] = document.getElementById('target-end-time').value.split(':'); target.setHours(parseInt(h), parseInt(m), 0, 0);
@@ -245,45 +249,22 @@
         }
     }
 
-    function startCountdown(id) {
-        Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key]));
-        const card = document.getElementById(`card-${id}`);
-        const mainCd = document.getElementById(`cd-val-${id}`);
-        const cueContainer = document.getElementById(`cue-timers-container-${id}`);
-        const noteText = card.querySelector('.cue-note').value;
-        const timePattern = /(\d{1,2})[:'"](\d{2})\s*([^\s\n\r，。,]+)?/g; 
-        let cuePoints = []; let match;
-        while ((match = timePattern.exec(noteText)) !== null) { cuePoints.push({ targetSec: parseInt(match[1]) * 60 + parseInt(match[2]), desc: (match[3] || "CUE") }); }
-        songCountdowns[id] = setInterval(() => {
-            if(!actualStartTimes[id]) return;
-            const m = parseInt(card.querySelector('.min-input').value || 0);
-            const s = parseInt(card.querySelector('.sec-input').value || 0);
-            const totalSecs = m * 60 + s;
-            const elapsed = Math.floor((new Date() - actualStartTimes[id]) / 1000);
-            let left = totalSecs - elapsed;
-            mainCd.innerText = (left < 0 ? "-" : "") + `${Math.floor(Math.abs(left)/60).toString().padStart(2, '0')}:${(Math.abs(left)%60).toString().padStart(2, '0')}`;
-            mainCd.style.color = left < 0 ? "var(--red)" : (left <= 10 ? "var(--warning)" : "#fff");
-            let cueHtml = ""; cuePoints.forEach(cp => { let d = cp.targetSec - elapsed; if (d > 0) cueHtml += `<div style="margin-top:5px;"><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`; }); cueContainer.innerHTML = cueHtml;
-            recalculateAll();
-        }, 1000);
-    }
-
     function exportData() { saveData(); const data = localStorage.getItem(CURRENT_STORAGE_KEY); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `concert_cue_${new Date().getMonth()+1}${new Date().getDate()}.json`; a.click(); }
-    function importData(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e) { try { JSON.parse(e.target.result); if (confirm("確定匯入覆蓋嗎？")) { localStorage.setItem(CURRENT_STORAGE_KEY, e.target.result); location.reload(); } } catch (err) { alert("格式錯誤！"); } }; reader.readAsText(file); }
-    function triggerStart(btn, id) { if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); lastActiveId = id; actualStartTimes[id] = new Date(); document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); document.getElementById(`card-${id}`).classList.add('active'); btn.classList.add('running'); startCountdown(id); recalculateAll(); }
-    function triggerEnd(id) { const card = document.getElementById(`card-${id}`); clearInterval(songCountdowns[id]); document.getElementById(`start-btn-${id}`).classList.remove('running'); document.getElementById(`end-btn-${id}`).classList.add('ended'); if (actualStartTimes[id] && !card.classList.contains('is-locked')) { const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000); card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0'); card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0'); } recalculateAll(); saveData(); }
-    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
-    function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; if(sortInstance) sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; }
-    function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
     function toggleLock(id) { const card = document.getElementById(`card-${id}`); const isLocked = card.classList.toggle('is-locked'); card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => el.disabled = isLocked); document.getElementById(`lock-btn-${id}`).innerText = isLocked ? '🔒' : '🔓'; saveData(); }
-    function updateCardType(id, type) { document.getElementById(`card-${id}`).setAttribute('data-type', type); saveData(); }
+    function startCountdown(id) { Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key])); const card = document.getElementById(`card-${id}`); const mainCd = document.getElementById(`cd-val-${id}`); const cueContainer = document.getElementById(`cue-timers-container-${id}`); const noteText = card.querySelector('.cue-note').value; const timePattern = /(\d{1,2})[:'"](\d{2})\s*([^\s\n\r，。,]+)?/g; let cuePoints = []; let match; while ((match = timePattern.exec(noteText)) !== null) { cuePoints.push({ targetSec: parseInt(match[1]) * 60 + parseInt(match[2]), desc: (match[3] || "CUE") }); } songCountdowns[id] = setInterval(() => { if(!actualStartTimes[id]) return; const m = parseInt(card.querySelector('.min-input').value || 0); const s = parseInt(card.querySelector('.sec-input').value || 0); const totalSecs = m * 60 + s; const elapsed = Math.floor((new Date() - actualStartTimes[id]) / 1000); let left = totalSecs - elapsed; mainCd.innerText = (left < 0 ? "-" : "") + `${Math.floor(Math.abs(left)/60).toString().padStart(2, '0')}:${(Math.abs(left)%60).toString().padStart(2, '0')}`; mainCd.style.color = left < 0 ? "var(--red)" : (left <= 10 ? "var(--warning)" : "#fff"); let cueHtml = ""; cuePoints.forEach(cp => { let d = cp.targetSec - elapsed; if (d > 0) cueHtml += `<div style="margin-top:5px;"><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`; }); cueContainer.innerHTML = cueHtml; recalculateAll(); }, 1000); }
+    function triggerEnd(id) { const card = document.getElementById(`card-${id}`); clearInterval(songCountdowns[id]); document.getElementById(`start-btn-${id}`).classList.remove('running'); document.getElementById(`end-btn-${id}`).classList.add('ended'); if (actualStartTimes[id] && !card.classList.contains('is-locked')) { const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000); card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0'); card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0'); } recalculateAll(); saveData(); }
+    function triggerStart(btn, id) { if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); lastActiveId = id; actualStartTimes[id] = new Date(); document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); document.getElementById(`card-${id}`).classList.add('active'); btn.classList.add('running'); startCountdown(id); recalculateAll(); }
+    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
+    function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
+    function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; }
+    function updateCardType(id, type) { document.getElementById(`card-${id}`).setAttribute('data-type', type); recalculateAll(); saveData(); }
     function autoGrow(el) { el.style.height = "5px"; el.style.height = (el.scrollHeight) + "px"; }
     function manualSave() { saveData(); const btn = document.getElementById('save-hint-btn'); btn.innerText = "SAVED!"; setTimeout(() => btn.innerText = "SAVE", 1500); }
     function resetData() { if(confirm("確定重設？")) { localStorage.clear(); location.reload(); } }
     function removeRow(id) { if(confirm("確定刪除？")) { document.getElementById(`card-${id}`).remove(); recalculateAll(); saveData(); } }
     function toggleSkip(id) { document.getElementById(`card-${id}`).classList.toggle('is-skipped'); recalculateAll(); saveData(); }
     function saveData() { const data = { title: document.getElementById('main-title').value, target: document.getElementById('target-end-time').value, items: [] }; document.querySelectorAll('.cue-card').forEach(card => { const id = card.id.replace('card-', ''); data.items.push({ id: id, name: card.querySelector('.cue-name').value, type: card.getAttribute('data-type'), duration: `${card.querySelector('.min-input').value}:${card.querySelector('.sec-input').value}`, note: card.querySelector('.cue-note').value, locked: card.classList.contains('is-locked'), skipped: card.classList.contains('is-skipped') }); }); localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data)); }
-    function loadData() { const list = document.getElementById('cue-list'); list.innerHTML = ""; let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v49'); if (raw) { const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target; data.items.forEach(item => addRow(item)); } else { for(let i=0; i<5; i++) addRow(); } initSortable(); }
+    function loadData() { const list = document.getElementById('cue-list'); list.innerHTML = ""; let raw = localStorage.getItem(CURRENT_STORAGE_KEY); if (raw) { const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target; data.items.forEach(item => addRow(item)); } else { for(let i=0; i<5; i++) addRow(); } initSortable(); }
     window.onload = loadData;
 </script>
 </body>
