@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AD良伴 V2.1</title>
+    <title>演唱會控台 - v46 鎖定功能修復版</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root { 
@@ -17,13 +17,11 @@
         .header-sticky { position: sticky; top: 0; background: var(--bg); z-index: 100; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .concert-title { background: transparent; color: var(--brightblue); border: none; font-size: 1.5rem; font-weight: bold; width: 100%; margin: 8px 0; outline: none; }
         .info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;}
-        
         .sort-toggle { display: flex; align-items: center; gap: 5px; background: #222; padding: 6px 12px; border-radius: 20px; border: 1px solid #444; color: #fff; cursor: pointer; }
         .sort-toggle.unlocked { background: var(--brightorange); color: #000; font-weight: bold; }
-
+        
         .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
         .status-box { background: var(--card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; }
-        .status-label { font-size: 0.7rem; color: #888; display: block; margin-bottom: 3px; }
         .remaining { color: var(--brightorange); font-size: 1.4rem; font-family: monospace; font-weight: bold; }
 
         .cue-card { background: var(--card); border-radius: 12px; padding: 12px; margin-bottom: 14px; border-left: 10px solid var(--gray); position: relative; transition: 0.4s; }
@@ -31,12 +29,10 @@
         .cue-card[data-type="talking"] { border-left-color: var(--lightgreen); background: rgba(152, 251, 152, 0.25); }
         .cue-card[data-type="vcr"] { border-left-color: var(--brightorange); background: rgba(255, 140, 0, 0.3); }
         .cue-card[data-type="other"] { border-left-color: var(--brightblue); background: rgba(0, 191, 255, 0.3); }
-        
-        .cue-card.active { outline: 2px solid #fff; box-shadow: 0 0 20px rgba(255,255,255,0.15); }
-        .cue-card.is-skipped { opacity: 0.2; background: #111 !important; border-left-color: #333 !important; }
+        .cue-card.active { outline: 2px solid #fff; }
+        .cue-card.is-locked { border-left-style: double; }
 
-        /* 排序手柄視覺 */
-        .drag-handle { display: none; margin-right: 8px; color: #aaa; font-size: 1.4rem; cursor: grab; padding: 4px; }
+        .drag-handle { display: none; margin-right: 8px; color: #aaa; font-size: 1.4rem; cursor: grab; }
         body.can-sort .drag-handle { display: inline-block; }
 
         .card-row-top { display: flex; gap: 10px; align-items: flex-start; }
@@ -44,22 +40,24 @@
         .right-clock { width: 130px; text-align: right; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
         
         .timer-val { font-family: 'Courier New', monospace; font-size: 1.8rem; font-weight: bold; color: #fff; line-height: 1; }
-        .cue-big-num { font-family: 'Courier New', monospace; font-size: 1.8rem; font-weight: bold; color: var(--warning); line-height: 1; display: block; }
-        .cue-label-small { font-size: 0.65rem; color: var(--warning); opacity: 0.8; white-space: nowrap; }
+        .cue-big-num { font-family: 'Courier New', monospace; font-size: 1.8rem; font-weight: bold; color: var(--warning); line-height: 1; }
 
         .index-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
         .index-label { font-family: monospace; font-size: 0.9rem; font-weight: 900; background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px; color: #fff; min-width: 45px; text-align: center; }
-        .time-marker-group { display: flex; gap: 4px; }
         .time-marker { font-family: monospace; font-size: 0.7rem; color: var(--brightblue); background: rgba(0, 191, 255, 0.1); padding: 2px 4px; border-radius: 4px; border: 1px solid rgba(0, 191, 255, 0.3); white-space: nowrap; }
 
         .cue-name { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 8px; border-radius: 4px; width: 100%; font-size: 1.1rem; box-sizing: border-box; outline: none; }
         .cue-note { width: 100%; background: rgba(0,0,0,0.3); border: 1px dashed rgba(255,255,255,0.2); color: #ccc; font-size: 0.9rem; padding: 8px; border-radius: 4px; outline: none; box-sizing: border-box; resize: none; overflow: hidden; margin-top: 8px; min-height: 45px;}
 
+        /* 下拉選單 + 打字 混合樣式 */
         .duration-picker { display: flex; align-items: center; background: #222; border: 1px solid #666; border-radius: 8px; padding: 0 4px; }
-        .time-input-mix { background: transparent; color: #fff; border: none; font-size: 1.1rem; font-family: monospace; outline: none; width: 35px; text-align: center; padding: 8px 0; font-weight: bold; }
-        .time-input-mix:disabled { color: #555; }
+        .time-unit { display: flex; align-items: center; position: relative; }
+        .time-input-box { background: transparent; color: #fff; border: none; font-size: 1.1rem; font-family: monospace; width: 30px; text-align: center; padding: 8px 0; font-weight: bold; outline: none; }
+        .time-input-box:disabled { color: #555; }
+        .time-select-trigger { background: transparent; color: #666; border: none; font-size: 0.6rem; padding: 0 2px; cursor: pointer; -webkit-appearance: none; }
+        .time-select-trigger:disabled { opacity: 0.2; pointer-events: none; }
 
-        .type-select { background: #222; color: #fff; border: 1px solid #666; padding: 8px 4px; border-radius: 8px; font-size: 0.85rem; appearance: none; -webkit-appearance: none; outline: none; }
+        .type-select { background: #222; color: #fff; border: 1px solid #666; padding: 8px 4px; border-radius: 8px; font-size: 0.85rem; -webkit-appearance: none; outline: none; }
         
         .controls-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 10px; }
         .btn { border: none; border-radius: 6px; font-weight: bold; cursor: pointer; padding: 10px 8px; font-size: 0.8rem; }
@@ -70,7 +68,6 @@
 
         @keyframes blink-green { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         @keyframes pulse-red { 0% { background-color: #801010; } 50% { background-color: #ff3b30; } 100% { background-color: #801010; } }
-        @keyframes blink-text { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -85,49 +82,34 @@
         <span>目標 <input type="time" id="target-end-time" value="22:00" oninput="updateClock(); recalculateAll(); saveData();" style="background:#333; color:#fff; border:none; border-radius:4px; padding:2px 5px; width:70px;"></span>
     </div>
     <div class="status-grid">
-        <div class="status-box"><span class="status-label">距離結束</span><span id="countdown" class="remaining">--:--:--</span></div>
-        <div class="status-box"><span class="status-label">全場超時</span><span id="offset-display" style="color:var(--green); font-weight:bold; font-size:1.4rem;">Safe</span></div>
+        <div class="status-box"><span id="countdown" class="remaining">--:--:--</span></div>
+        <div class="status-box"><span id="offset-display" style="color:var(--green); font-weight:bold; font-size:1.4rem;">Safe</span></div>
     </div>
 </div>
 
 <div id="cue-list"></div>
 
-<div class="footer-tools" style="position:fixed; bottom:0; width:100%; display:flex; gap:8px; padding:15px; background:rgba(0,0,0,0.95); box-sizing:border-box; z-index:200; backdrop-filter: blur(10px);">
+<div class="footer-tools" style="position:fixed; bottom:0; width:100%; display:flex; gap:8px; padding:15px; background:rgba(0,0,0,0.95); box-sizing:border-box; z-index:200;">
     <button class="btn" style="background:#333; color:#fff; flex:1;" onclick="resetData()">RESET</button>
-    <button class="btn btn-add" style="background:var(--brightblue); color:#fff; flex:2; font-size:1.1rem; border-radius:10px;" onclick="addRow()">+ 新增項目</button>
+    <button class="btn btn-add" style="background:var(--brightblue); color:#fff; flex:2;" onclick="addRow()">+ 新增項目</button>
     <button class="btn" id="save-hint-btn" style="background:var(--brightorange); color:#fff; flex:1;" onclick="manualSave()">SAVE</button>
 </div>
 
 <script>
     let songCountdowns = {}; let actualStartTimes = {}; let lastActiveId = null;
     let globalSortEnabled = false; let sortInstance;
-    const CURRENT_STORAGE_KEY = 'concert_app_v44';
+    const CURRENT_STORAGE_KEY = 'concert_app_v46';
 
     setInterval(updateClock, 1000);
 
-    function initSortable() {
-        const el = document.getElementById('cue-list');
-        if (sortInstance) sortInstance.destroy();
-        sortInstance = Sortable.create(el, { 
-            animation: 150, 
-            handle: '.drag-handle', 
-            disabled: !globalSortEnabled, 
-            onEnd: () => { recalculateAll(); saveData(); } 
-        });
+    function genOptions(max) {
+        let h = "";
+        for(let i=0; i<max; i++) {
+            let v = i.toString().padStart(2, '0');
+            h += `<option value="${v}">${v}</option>`;
+        }
+        return h;
     }
-
-    function toggleGlobalSort() {
-        globalSortEnabled = !globalSortEnabled;
-        if(sortInstance) sortInstance.option("disabled", !globalSortEnabled);
-        document.body.classList.toggle('can-sort', globalSortEnabled);
-        const btn = document.getElementById('sort-toggle-btn');
-        btn.classList.toggle('unlocked', globalSortEnabled);
-        document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒';
-        document.getElementById('sort-text').innerText = globalSortEnabled ? '允許排序' : '排序鎖定';
-        saveData();
-    }
-
-    function autoGrow(el) { if(!el) return; el.style.height = "5px"; el.style.height = (el.scrollHeight) + "px"; }
 
     function addRow(data = null) {
         const id = data?.id || Date.now() + Math.random();
@@ -144,19 +126,14 @@
                     <div class="index-row">
                         <span class="drag-handle">☰</span>
                         <span class="index-label"></span>
-                        <div class="time-marker-group">
-                            <span class="time-marker start-tag">S: --:--:--</span>
-                            <span class="time-marker end-tag">E: --:--:--</span>
-                        </div>
+                        <span class="time-marker start-tag">S: --:--:--</span>
+                        <span class="time-marker end-tag">E: --:--:--</span>
                     </div>
                     <input type="text" value="${data?.name || '項目名稱'}" class="cue-name" oninput="saveData()">
-                    <textarea class="cue-note" placeholder="00:00 筆記" oninput="autoGrow(this); saveData();" onfocus="autoGrow(this)">${data?.note || ''}</textarea>
+                    <textarea class="cue-note" placeholder="筆記..." oninput="autoGrow(this); saveData();">${data?.note || ''}</textarea>
                 </div>
                 <div class="right-clock">
-                    <div>
-                        <span id="cd-val-${id}" class="timer-val">--:--</span>
-                        <div style="font-size:0.5rem; color:#888; letter-spacing:1px;">LEFT</div>
-                    </div>
+                    <div><span id="cd-val-${id}" class="timer-val">--:--</span></div>
                     <div id="cue-timers-container-${id}"></div>
                 </div>
             </div>
@@ -170,9 +147,15 @@
                         <option value="other" ${data?.type==='other'?'selected':''}>Other</option>
                     </select>
                     <div class="duration-picker">
-                        <input type="number" class="time-input-mix min-input" value="${initialMin}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
+                        <div class="time-unit">
+                            <input type="number" class="time-input-box min-input" value="${initialMin}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
+                            <select class="time-select-trigger" onchange="this.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(61)}</select>
+                        </div>
                         <span style="color:#666; font-weight:bold;">:</span>
-                        <input type="number" class="time-input-mix sec-input" value="${initialSec}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
+                        <div class="time-unit">
+                            <input type="number" class="time-input-box sec-input" value="${initialSec}" oninput="recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>
+                            <select class="time-select-trigger" onchange="this.previousElementSibling.value=this.value; recalculateAll(); saveData();" ${data?.locked ? 'disabled' : ''}>${genOptions(60)}</select>
+                        </div>
                     </div>
                     <button class="btn" style="background:none; color:#ff9500; font-size:1.2rem; padding:0 2px;" onclick="toggleLock('${id}')" id="lock-btn-${id}">${data?.locked ? '🔒' : '🔓'}</button>
                 </div>
@@ -185,20 +168,36 @@
             </div>`;
         
         document.getElementById('cue-list').appendChild(card);
-        setTimeout(() => autoGrow(card.querySelector('.cue-note')), 50);
         recalculateAll();
     }
 
-    function triggerStart(btn, id) { 
-        if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); 
-        lastActiveId = id; actualStartTimes[id] = new Date(); 
-        document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); 
-        document.querySelectorAll('.btn-start').forEach(b => b.classList.remove('running')); 
-        document.querySelectorAll('.btn-end').forEach(b => b.classList.remove('ended')); 
-        document.getElementById(`card-${id}`).classList.add('active'); 
-        btn.classList.add('running'); 
-        startCountdown(id); 
-        recalculateAll();
+    function toggleLock(id) {
+        const card = document.getElementById(`card-${id}`);
+        const isLocked = card.classList.toggle('is-locked');
+        const btn = document.getElementById(`lock-btn-${id}`);
+        
+        // 禁用/啟用所有輸入元件
+        card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => {
+            el.disabled = isLocked;
+        });
+        
+        btn.innerText = isLocked ? '🔒' : '🔓';
+        saveData();
+    }
+
+    function triggerEnd(id) { 
+        const card = document.getElementById(`card-${id}`);
+        clearInterval(songCountdowns[id]); 
+        document.getElementById(`start-btn-${id}`).classList.remove('running'); 
+        document.getElementById(`end-btn-${id}`).classList.add('ended'); 
+        
+        // 如果沒被鎖定，才自動更新時間
+        if (actualStartTimes[id] && !card.classList.contains('is-locked')) { 
+            const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000);
+            card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0');
+            card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0');
+        } 
+        recalculateAll(); saveData(); 
     }
 
     function startCountdown(id) {
@@ -214,8 +213,8 @@
         }
         
         songCountdowns[id] = setInterval(() => {
-            const m = parseInt(card.querySelector('.min-input').value) || 0;
-            const s = parseInt(card.querySelector('.sec-input').value) || 0;
+            const m = parseInt(card.querySelector('.min-input').value || 0);
+            const s = parseInt(card.querySelector('.sec-input').value || 0);
             const totalSecs = m * 60 + s;
             const elapsed = Math.floor((new Date() - actualStartTimes[id]) / 1000);
             let left = totalSecs - elapsed;
@@ -225,27 +224,11 @@
             let cueHtml = "";
             cuePoints.forEach(cp => {
                 let d = cp.targetSec - elapsed;
-                if (d > 0) {
-                    cueHtml += `<div style="margin-top:5px;"><div class="cue-label-small">${cp.desc}</div><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`;
-                }
+                if (d > 0) cueHtml += `<div style="margin-top:5px;"><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`;
             });
             cueContainer.innerHTML = cueHtml;
             recalculateAll();
         }, 1000);
-    }
-
-    function triggerEnd(id) { 
-        const card = document.getElementById(`card-${id}`);
-        if(!card) return;
-        clearInterval(songCountdowns[id]); 
-        document.getElementById(`start-btn-${id}`).classList.remove('running'); 
-        document.getElementById(`end-btn-${id}`).classList.add('ended'); 
-        if (actualStartTimes[id] && !card.classList.contains('is-locked')) { 
-            const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000);
-            card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0');
-            card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0');
-        } 
-        recalculateAll(); saveData(); 
     }
 
     function recalculateAll() {
@@ -253,49 +236,32 @@
         let rollingStartTime = null, foundActive = false, finalEndTime = null;
         let counters = { song: 0, talking: 0, vcr: 0, other: 0 };
         const prefix = { song: 'S', talking: 'T', vcr: 'V', other: 'O' };
-
         cards.forEach((card) => {
             const id = card.id.replace('card-', '');
-            const type = card.getAttribute('data-type');
             const isSkipped = card.classList.contains('is-skipped');
-            if (!isSkipped) { 
-                counters[type]++; 
-                card.querySelector('.index-label').innerText = `${prefix[type]}-${counters[type]}`; 
-            } else { card.querySelector('.index-label').innerText = `--`; }
-
+            if (!isSkipped) { counters[card.getAttribute('data-type')]++; card.querySelector('.index-label').innerText = `${prefix[card.getAttribute('data-type')]}-${counters[card.getAttribute('data-type')]}`; }
             const dSec = isSkipped ? 0 : (parseInt(card.querySelector('.min-input').value || 0) * 60 + parseInt(card.querySelector('.sec-input').value || 0));
             const sTag = card.querySelector('.start-tag'); const eTag = card.querySelector('.end-tag');
-
-            if (card.classList.contains('active')) { 
-                const actualStart = actualStartTimes[id];
-                sTag.innerText = "S: " + actualStart.toTimeString().split(' ')[0];
-                const expectedEnd = new Date(actualStart.getTime() + dSec * 1000);
-                eTag.innerText = "E: " + expectedEnd.toTimeString().split(' ')[0];
-                rollingStartTime = expectedEnd; foundActive = true; 
-            } else if (foundActive) {
-                sTag.innerText = isSkipped ? "S: SKIP" : "S: " + rollingStartTime.toTimeString().split(' ')[0];
-                const endTime = new Date(rollingStartTime.getTime() + dSec * 1000);
-                eTag.innerText = isSkipped ? "E: SKIP" : "E: " + endTime.toTimeString().split(' ')[0];
-                rollingStartTime = endTime; finalEndTime = endTime;
-            } else { sTag.innerText = "S: --:--:--"; eTag.innerText = "E: --:--:--"; }
+            if (card.classList.contains('active')) { rollingStartTime = new Date(actualStartTimes[id].getTime() + dSec * 1000); foundActive = true; sTag.innerText = "S: " + actualStartTimes[id].toTimeString().split(' ')[0]; eTag.innerText = "E: " + rollingStartTime.toTimeString().split(' ')[0]; }
+            else if (foundActive) { sTag.innerText = "S: " + rollingStartTime.toTimeString().split(' ')[0]; const endTime = new Date(rollingStartTime.getTime() + dSec * 1000); eTag.innerText = "E: " + endTime.toTimeString().split(' ')[0]; rollingStartTime = endTime; finalEndTime = endTime; }
         });
-
         if (finalEndTime) {
-            const targetStr = document.getElementById('target-end-time').value;
-            const target = new Date(); const [h, m] = targetStr.split(':'); target.setHours(parseInt(h), parseInt(m), 0, 0);
-            const diff = finalEndTime - target;
-            const off = document.getElementById('offset-display');
-            if(diff > 0) { off.innerText = `Delay: -${Math.floor(diff/60000)}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; off.style.color = "var(--red)"; }
-            else { off.innerText = "Safe"; off.style.color = "var(--green)"; }
+            const target = new Date(); const [h, m] = document.getElementById('target-end-time').value.split(':'); target.setHours(h, m, 0, 0);
+            const diff = finalEndTime - target; const off = document.getElementById('offset-display');
+            if(diff > 0) { off.innerText = `Delay: -${Math.floor(diff/60000)}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; off.style.color = "var(--red)"; } else { off.innerText = "Safe"; off.style.color = "var(--green)"; }
         }
     }
 
-    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cdDisplay = document.getElementById('countdown'); if (diff > 0) { const hh = Math.floor(diff / 3600000).toString().padStart(2, '0'); const mm = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0'); const ss = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0'); cdDisplay.innerText = `${hh}:${mm}:${ss}`; cdDisplay.style.color = "var(--brightorange)"; } else { cdDisplay.innerText = "OVER TIME"; cdDisplay.style.color = "var(--red)"; } } }
+    function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
+    function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; saveData(); }
+    function triggerStart(btn, id) { if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); lastActiveId = id; actualStartTimes[id] = new Date(); document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); document.getElementById(`card-${id}`).classList.add('active'); btn.classList.add('running'); startCountdown(id); recalculateAll(); }
+    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
     function updateCardType(id, type) { document.getElementById(`card-${id}`).setAttribute('data-type', type); saveData(); }
+    function autoGrow(el) { el.style.height = "5px"; el.style.height = (el.scrollHeight) + "px"; }
     function manualSave() { saveData(); const btn = document.getElementById('save-hint-btn'); btn.innerText = "SAVED!"; setTimeout(() => btn.innerText = "SAVE", 1500); }
     function resetData() { if(confirm("確定重設？")) { localStorage.clear(); location.reload(); } }
     function removeRow(id) { if(confirm("確定刪除？")) { document.getElementById(`card-${id}`).remove(); recalculateAll(); saveData(); } }
-
+    function toggleSkip(id) { document.getElementById(`card-${id}`).classList.toggle('is-skipped'); recalculateAll(); saveData(); }
     function saveData() {
         const data = { title: document.getElementById('main-title').value, target: document.getElementById('target-end-time').value, items: [] };
         document.querySelectorAll('.cue-card').forEach(card => {
@@ -304,17 +270,15 @@
         });
         localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data));
     }
-    
     function loadData() {
         const list = document.getElementById('cue-list'); list.innerHTML = "";
-        let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v43');
+        let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v45');
         if (raw) {
             const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target;
             data.items.forEach(item => addRow(item));
         } else { for(let i=0; i<5; i++) addRow(); }
         initSortable();
     }
-    
     window.onload = loadData;
 </script>
 </body>
