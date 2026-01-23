@@ -5,19 +5,22 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>演唱會控台 - 擬真按鈕版</title>
+    <title>演唱會控台 - 資料救援修復版</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root { 
             --gray: #8e8e93; --lightgreen: #98fb98; --brightorange: #ff8c00; --brightblue: #00bfff;
             --red: #ff3b30; --green: #34c759; --bg: #000; --card: #1c1c1e; --warning: #ffcc00;
-            --dim-green: #2d4a35; /* 待機綠：偏灰暗的綠色 */
+            --dim-green: #2d4a35;
         }
         body { background-color: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; padding: env(safe-area-inset-top) 10px calc(env(safe-area-inset-bottom) + 110px) 10px; user-select: none; }
         .header-sticky { position: sticky; top: 0; background: var(--bg); z-index: 100; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .concert-title { background: transparent; color: var(--brightblue); border: none; font-size: 1.5rem; font-weight: bold; width: 100%; margin: 8px 0; outline: none; }
         .info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;}
-        .sort-toggle { display: flex; align-items: center; gap: 5px; background: #222; padding: 4px 10px; border-radius: 20px; border: 1px solid #444; color: #fff; cursor: pointer; }
+        
+        .sort-toggle { display: flex; align-items: center; gap: 5px; background: #222; padding: 6px 12px; border-radius: 20px; border: 1px solid #444; color: #fff; cursor: pointer; transition: 0.3s; }
+        .sort-toggle.unlocked { background: var(--brightorange); border-color: #fff; color: #000; font-weight: bold; }
+
         .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
         .status-box { background: var(--card); padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #333; }
         .status-label { font-size: 0.7rem; color: #888; display: block; margin-bottom: 3px; }
@@ -33,7 +36,7 @@
         .cue-card.active { background: #2c2c2e; outline: 1px solid #555; }
         .cue-card.is-locked { background: #111; opacity: 0.9; border-left-style: double; }
 
-        .drag-handle { display: none; margin-right: 10px; color: #555; font-size: 1.2rem; cursor: grab; }
+        .drag-handle { display: none; margin-right: 12px; color: #aaa; font-size: 1.4rem; cursor: grab; padding: 5px; }
         body.can-sort .drag-handle { display: inline-block; }
 
         .card-body { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; }
@@ -43,6 +46,7 @@
         .cue-name { background: #333; border: none; color: #fff; padding: 8px; border-radius: 4px; width: 100%; font-size: 1.1rem; box-sizing: border-box; }
         .cue-note { width: 100%; background: #252525; border: 1px dashed #444; color: #ccc; font-size: 0.9rem; padding: 8px; border-radius: 4px; outline: none; box-sizing: border-box; resize: none; overflow: hidden; line-height: 1.4; min-height: 40px; }
         .timer-val { font-family: 'Courier New', monospace; font-size: 1.4rem; font-weight: bold; display: block; line-height: 1; }
+        
         .is-overrun { color: var(--red) !important; animation: blink-text 0.3s infinite; }
         .now-flash { color: var(--red); animation: blink-text 0.4s infinite; }
         .time-tag { color: var(--brightblue); font-family: monospace; font-size: 0.75rem; display: inline-block; margin-right: 10px; }
@@ -52,11 +56,8 @@
         .cue-duration:disabled { background: #222; color: #666; }
 
         .btn { border: none; border-radius: 8px; font-weight: bold; cursor: pointer; padding: 10px 14px; }
-        
-        /* START 按鈕優化 */
         .btn-start { background-color: var(--dim-green); color: #888; transition: 0.3s; }
         .btn-start.running { background-color: var(--green); color: #fff; animation: blink-green 1.2s infinite; }
-        
         .btn-end { background: #444; color: #fff; transition: 0.5s; }
         .btn-end.ended { animation: pulse-red 2s infinite ease-in-out; background-color: var(--red); color: white; }
         
@@ -104,38 +105,35 @@
 <script>
     let songCountdowns = {}; let actualStartTimes = {}; let lastActiveId = null;
     let globalSortEnabled = false;
-    let sortable;
+    let sortInstance;
+    const CURRENT_STORAGE_KEY = 'concert_app_v20';
 
     setInterval(updateClock, 1000);
 
     function initSortable() {
         const el = document.getElementById('cue-list');
-        sortable = Sortable.create(el, { 
-            animation: 150, handle: '.drag-handle', disabled: true, 
+        if (sortInstance) sortInstance.destroy();
+        sortInstance = Sortable.create(el, { 
+            animation: 150, handle: '.drag-handle', disabled: !globalSortEnabled, 
             onEnd: () => { recalculateAll(); saveData(); } 
         });
     }
 
     function toggleGlobalSort() {
-        if(!sortable) return;
+        if(!sortInstance) return;
         globalSortEnabled = !globalSortEnabled;
-        sortable.option("disabled", !globalSortEnabled);
+        sortInstance.option("disabled", !globalSortEnabled);
         document.body.classList.toggle('can-sort', globalSortEnabled);
+        const btn = document.getElementById('sort-toggle-btn');
+        btn.classList.toggle('unlocked', globalSortEnabled);
         document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒';
         document.getElementById('sort-text').innerText = globalSortEnabled ? '允許排序' : '排序鎖定';
         saveData();
     }
 
-    function autoGrow(element) { 
-        if(!element) return;
-        element.style.height = "5px"; 
-        element.style.height = (element.scrollHeight) + "px"; 
-    }
-
+    function autoGrow(element) { if(!element) return; element.style.height = "5px"; element.style.height = (element.scrollHeight) + "px"; }
     function updateClock() {
-        const now = new Date();
-        const ct = document.getElementById('current-time');
-        if(ct) ct.innerText = now.toTimeString().split(' ')[0];
+        const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0];
         const targetStr = document.getElementById('target-end-time').value;
         const target = new Date(); const [h, m] = targetStr.split(':'); target.setHours(h, m, 0);
         const diff = target - now; const cd = document.getElementById('countdown');
@@ -198,32 +196,24 @@
         const durInput = document.getElementById(`dur-${id}`); 
         const isLocked = card.classList.toggle('is-locked'); 
         btn.innerText = isLocked ? '🔒' : '🔓'; 
-        durInput.disabled = isLocked; 
-        saveData(); 
+        durInput.disabled = isLocked; saveData(); 
     }
 
     function triggerStart(btn, id) { 
         if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); 
-        lastActiveId = id; 
-        actualStartTimes[id] = new Date(); 
+        lastActiveId = id; actualStartTimes[id] = new Date(); 
         document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); 
         document.querySelectorAll('.btn-start').forEach(b => b.classList.remove('running')); 
         document.querySelectorAll('.btn-end').forEach(b => b.classList.remove('ended')); 
-
         document.getElementById(`card-${id}`).classList.add('active'); 
-        btn.classList.add('running'); 
-        startCountdown(id); 
-        recalculateAll(); 
+        btn.classList.add('running'); startCountdown(id); recalculateAll(); 
     }
 
     function triggerEnd(id) { 
-        const card = document.getElementById(`card-${id}`); 
-        if(!card) return;
+        const card = document.getElementById(`card-${id}`); if(!card) return;
         clearInterval(songCountdowns[id]); 
         const sBtn = document.getElementById(`start-btn-${id}`); if(sBtn) sBtn.classList.remove('running'); 
         const eBtn = document.getElementById(`end-btn-${id}`); if(eBtn) eBtn.classList.add('ended'); 
-        const ctContainer = document.getElementById(`cue-timers-container-${id}`); if(ctContainer) ctContainer.innerHTML = ""; 
-        
         if (actualStartTimes[id] && !card.classList.contains('is-locked')) { 
             const diffMs = new Date() - actualStartTimes[id]; 
             const m = Math.floor(diffMs / 60000).toString().padStart(2, '0'); 
@@ -235,7 +225,8 @@
 
     function startCountdown(id) {
         Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key]));
-        const mainCd = document.getElementById(`cd-val-${id}`); const cueContainer = document.getElementById(`cue-timers-container-${id}`);
+        const mainCd = document.getElementById(`cd-val-${id}`); 
+        const cueContainer = document.getElementById(`cue-timers-container-${id}`);
         const card = document.getElementById(`card-${id}`);
         const noteText = card.querySelector('.cue-note').value;
         const totalSecs = parseDuration(document.getElementById(`dur-${id}`).value); 
@@ -260,11 +251,11 @@
     }
 
     function parseDuration(str) { const parts = str.split(':'); return parts.length === 2 ? parseInt(parts[0]) * 60 + parseInt(parts[1]) : parseInt(parts[0]) * 60; }
+    
     function recalculateAll() {
         const cards = document.querySelectorAll('.cue-card'); let rollingStartTime = null; let foundActive = false; let finalEndTime = null;
         cards.forEach((card, index) => {
-            const indexLabel = card.querySelector('.index-label');
-            if(indexLabel) indexLabel.innerText = index + 1 + "."; 
+            const indexLabel = card.querySelector('.index-label'); if(indexLabel) indexLabel.innerText = index + 1 + "."; 
             const id = card.id.replace('card-', '');
             if (card.classList.contains('active')) { rollingStartTime = actualStartTimes[id]; foundActive = true; }
             if (foundActive && rollingStartTime) {
@@ -294,18 +285,37 @@
                 const id = card.id.replace('card-', '');
                 data.items.push({ id: id, name: card.querySelector('.cue-name').value, type: card.getAttribute('data-type'), duration: document.getElementById(`dur-${id}`).value, note: card.querySelector('.cue-note').value, locked: card.classList.contains('is-locked') });
             });
-            localStorage.setItem('concert_app_v18', JSON.stringify(data));
+            localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data));
         } catch (e) {}
     }
 
     function loadData() {
-        const raw = localStorage.getItem('concert_app_v18');
         const list = document.getElementById('cue-list'); list.innerHTML = "";
+        
+        // --- 救援邏輯：掃描所有可能的舊 Key ---
+        let raw = localStorage.getItem(CURRENT_STORAGE_KEY);
+        if (!raw) {
+            for (let v = 19; v >= 1; v--) {
+                let temp = localStorage.getItem('concert_app_v' + v);
+                if (temp) { raw = temp; break; }
+            }
+        }
+
         if (raw) {
-            const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target;
+            const data = JSON.parse(raw);
+            document.getElementById('main-title').value = data.title || "演唱會名稱";
+            document.getElementById('target-end-time').value = data.target || "22:00";
             data.items.forEach(item => addRow(item));
-            if (data.sortLocked === false) setTimeout(toggleGlobalSort, 200);
-        } else { for(let i=0; i<40; i++) addRow({ name: `項目 ${i+1}`, duration: "05:00" }); }
+            globalSortEnabled = !data.sortLocked;
+        } else { 
+            for(let i=0; i<40; i++) addRow({ name: `項目 ${i+1}`, duration: "05:00" }); 
+            globalSortEnabled = false;
+        }
+        
+        const btn = document.getElementById('sort-toggle-btn');
+        document.body.classList.toggle('can-sort', globalSortEnabled);
+        document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒';
+        document.getElementById('sort-text').innerText = globalSortEnabled ? '允許排序' : '排序鎖定';
         initSortable();
     }
 
