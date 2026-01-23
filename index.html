@@ -5,7 +5,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>AD良伴_v2.2</title>
+    <title>演唱會控台 - v50 全域重設計時版</title>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
         :root { 
@@ -13,7 +13,7 @@
             --red: #ff3b30; --green: #34c759; --bg: #000; --card: #1c1c1e; --warning: #ffcc00;
             --dim-green: #2d4a35;
         }
-        body { background-color: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; padding: env(safe-area-inset-top) 10px calc(env(safe-area-inset-bottom) + 110px) 10px; user-select: none; }
+        body { background-color: var(--bg); color: #fff; font-family: -apple-system, sans-serif; margin: 0; padding: env(safe-area-inset-top) 10px calc(env(safe-area-inset-bottom) + 160px) 10px; user-select: none; }
         .header-sticky { position: sticky; top: 0; background: var(--bg); z-index: 100; padding-bottom: 10px; border-bottom: 1px solid #333; }
         .concert-title { background: transparent; color: var(--brightblue); border: none; font-size: 1.5rem; font-weight: bold; width: 100%; margin: 8px 0; outline: none; }
         .info-bar { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #aaa; margin-bottom: 5px;}
@@ -31,6 +31,7 @@
         .cue-card[data-type="other"] { border-left-color: var(--brightblue); background: rgba(0, 191, 255, 0.3); }
         .cue-card.active { outline: 2px solid #fff; }
         .cue-card.is-locked { border-left-style: double; }
+        .cue-card.is-skipped { opacity: 0.2; background: #111 !important; transform: scale(0.98); }
 
         .drag-handle { display: none; margin-right: 8px; color: #aaa; font-size: 1.4rem; cursor: grab; }
         body.can-sort .drag-handle { display: inline-block; }
@@ -49,23 +50,16 @@
         .cue-name { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 8px; border-radius: 4px; width: 100%; font-size: 1.1rem; box-sizing: border-box; outline: none; }
         .cue-note { width: 100%; background: rgba(0,0,0,0.3); border: 1px dashed rgba(255,255,255,0.2); color: #ccc; font-size: 0.9rem; padding: 8px; border-radius: 4px; outline: none; box-sizing: border-box; resize: none; overflow: hidden; margin-top: 8px; min-height: 45px;}
 
-        /* 下拉選單 + 打字 混合樣式優化 */
         .duration-picker { display: flex; align-items: center; background: #222; border: 1px solid #666; border-radius: 8px; padding: 0 4px; }
         .time-unit { display: flex; align-items: center; position: relative; }
         .time-input-box { background: transparent; color: #fff; border: none; font-size: 1.1rem; font-family: monospace; width: 30px; text-align: center; padding: 8px 0; font-weight: bold; outline: none; }
         .time-input-box:disabled { color: #555; }
         
-        /* 隱藏原生選單文字，只留 icon */
         .time-select-wrapper { position: relative; width: 14px; height: 30px; display: flex; align-items: center; justify-content: center; }
         .time-select-wrapper::after { content: "▾"; font-size: 0.8rem; color: #666; pointer-events: none; }
-        .time-select-trigger { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            opacity: 0; cursor: pointer; -webkit-appearance: none; 
-        }
-        .is-locked .time-select-wrapper::after { opacity: 0.2; }
+        .time-select-trigger { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; -webkit-appearance: none; }
 
-        .type-select { background: #222; color: #fff; border: 1px solid #666; padding: 8px 4px; border-radius: 8px; font-size: 0.85rem; -webkit-appearance: none; outline: none; }
-        
+        .type-select { background: #222; color: #fff; border: 1px solid #666; padding: 8px 4px; border-radius: 8px; font-size: 0.85rem; appearance: none; -webkit-appearance: none; outline: none; text-align: center; }
         .controls-row { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; margin-top: 10px; }
         .btn { border: none; border-radius: 6px; font-weight: bold; cursor: pointer; padding: 10px 8px; font-size: 0.8rem; }
         .btn-start { background-color: var(--dim-green); color: #888; min-width: 55px; }
@@ -73,6 +67,9 @@
         .btn-end { background: #444; color: #fff; min-width: 45px; }
         .btn-end.ended { animation: pulse-red 2s infinite; background-color: var(--red); color: white; }
 
+        .footer-tools { position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.95); padding: 15px; display: flex; flex-direction: column; gap: 8px; backdrop-filter: blur(10px); z-index: 200; }
+        .tool-row { display: flex; gap: 8px; width: 100%; }
+        
         @keyframes blink-green { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         @keyframes pulse-red { 0% { background-color: #801010; } 50% { background-color: #ff3b30; } 100% { background-color: #801010; } }
     </style>
@@ -96,25 +93,61 @@
 
 <div id="cue-list"></div>
 
-<div class="footer-tools" style="position:fixed; bottom:0; width:100%; display:flex; gap:8px; padding:15px; background:rgba(0,0,0,0.95); box-sizing:border-box; z-index:200;">
-    <button class="btn" style="background:#333; color:#fff; flex:1;" onclick="resetData()">RESET</button>
-    <button class="btn btn-add" style="background:var(--brightblue); color:#fff; flex:2;" onclick="addRow()">+ 新增項目</button>
-    <button class="btn" id="save-hint-btn" style="background:var(--brightorange); color:#fff; flex:1;" onclick="manualSave()">SAVE</button>
+<div class="footer-tools">
+    <div class="tool-row">
+        <button class="btn" style="background:#333; color:#fff; flex:1;" onclick="zeroAllTimers()">ZERO ALL</button>
+        <button class="btn btn-add" style="background:var(--brightblue); color:#fff; flex:2; font-size:1.1rem; border-radius:10px;" onclick="addRow()">+ 新增項目</button>
+        <button class="btn" id="save-hint-btn" style="background:var(--brightorange); color:#fff; flex:1;" onclick="manualSave()">SAVE</button>
+    </div>
+    <div class="tool-row" style="border-top: 1px solid #444; padding-top: 8px;">
+        <button class="btn" style="background:#333; color:#fff; flex:1;" onclick="resetData()">RESET</button>
+        <button class="btn" style="background:#444; color:#fff; flex:1.5;" onclick="exportData()">📤 匯出檔案</button>
+        <button class="btn" style="background:#444; color:#fff; flex:1.5;" onclick="document.getElementById('importFile').click()">📥 匯入檔案</button>
+        <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+    </div>
 </div>
 
 <script>
     let songCountdowns = {}; let actualStartTimes = {}; let lastActiveId = null;
     let globalSortEnabled = false; let sortInstance;
-    const CURRENT_STORAGE_KEY = 'concert_app_v47';
+    const CURRENT_STORAGE_KEY = 'concert_app_v50';
 
     setInterval(updateClock, 1000);
 
+    // --- 全域計時器歸零功能 ---
+    function zeroAllTimers() {
+        if(!confirm("確定要將所有進行中的計時器歸零嗎？這不會刪除歌單內容。")) return;
+        
+        // 停止所有定時器
+        Object.keys(songCountdowns).forEach(key => clearInterval(songCountdowns[key]));
+        songCountdowns = {};
+        actualStartTimes = {};
+        lastActiveId = null;
+
+        // 重設 UI 狀態
+        document.querySelectorAll('.cue-card').forEach(card => {
+            card.classList.remove('active');
+            const id = card.id.replace('card-', '');
+            const mainCd = document.getElementById(`cd-val-${id}`);
+            const cueContainer = document.getElementById(`cue-timers-container-${id}`);
+            const sTag = card.querySelector('.start-tag');
+            const eTag = card.querySelector('.end-tag');
+            
+            if(mainCd) { mainCd.innerText = "--:--"; mainCd.style.color = "#fff"; }
+            if(cueContainer) cueContainer.innerHTML = "";
+            if(sTag) sTag.innerText = "S: --:--:--";
+            if(eTag) eTag.innerText = "E: --:--:--";
+        });
+
+        // 恢復按鈕外觀
+        document.querySelectorAll('.btn-start').forEach(b => b.classList.remove('running'));
+        document.querySelectorAll('.btn-end').forEach(b => b.classList.remove('ended'));
+        
+        recalculateAll();
+    }
+
     function genOptions(max) {
-        let h = "";
-        for(let i=0; i<max; i++) {
-            let v = i.toString().padStart(2, '0');
-            h += `<option value="${v}">${v}</option>`;
-        }
+        let h = ""; for(let i=0; i<max; i++) { let v = i.toString().padStart(2, '0'); h += `<option value="${v}">${v}</option>`; }
         return h;
     }
 
@@ -123,8 +156,7 @@
         const card = document.createElement('div');
         card.className = `cue-card ${data?.locked ? 'is-locked' : ''} ${data?.skipped ? 'is-skipped' : ''}`;
         card.id = `card-${id}`; card.setAttribute('data-type', data?.type || 'song');
-
-        let initialMin = data?.duration ? data.duration.split(':')[0] : "05";
+        let initialMin = data?.duration ? data.duration.split(':')[0] : "00";
         let initialSec = data?.duration ? data.duration.split(':')[1] : "00";
 
         card.innerHTML = `
@@ -133,18 +165,19 @@
                     <div class="index-row">
                         <span class="drag-handle">☰</span>
                         <span class="index-label"></span>
-                        <span class="time-marker start-tag">S: --:--:--</span>
-                        <span class="time-marker end-tag">E: --:--:--</span>
+                        <div class="time-marker-group">
+                            <span class="time-marker start-tag">S: --:--:--</span>
+                            <span class="time-marker end-tag">E: --:--:--</span>
+                        </div>
                     </div>
                     <input type="text" value="${data?.name || '項目名稱'}" class="cue-name" oninput="saveData()">
-                    <textarea class="cue-note" placeholder="筆記..." oninput="autoGrow(this); saveData();">${data?.note || ''}</textarea>
+                    <textarea class="cue-note" placeholder="00:00 內容" oninput="autoGrow(this); saveData();">${data?.note || ''}</textarea>
                 </div>
                 <div class="right-clock">
                     <div><span id="cd-val-${id}" class="timer-val">--:--</span></div>
                     <div id="cue-timers-container-${id}"></div>
                 </div>
             </div>
-
             <div class="controls-row">
                 <div style="display:flex; align-items:center; gap:5px;">
                     <select class="type-select" onchange="updateCardType('${id}', this.value); recalculateAll();">
@@ -177,30 +210,39 @@
                     <button class="btn" style="background:none; color:#555; padding:0 2px;" onclick="removeRow('${id}')">✕</button>
                 </div>
             </div>`;
-        
         document.getElementById('cue-list').appendChild(card);
+        const minS = card.querySelector('.min-select'); const secS = card.querySelector('.sec-select');
+        minS.value = initialMin.padStart(2,'0'); secS.value = initialSec.padStart(2,'0');
         recalculateAll();
     }
 
-    function toggleLock(id) {
-        const card = document.getElementById(`card-${id}`);
-        const isLocked = card.classList.toggle('is-locked');
-        card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => el.disabled = isLocked);
-        document.getElementById(`lock-btn-${id}`).innerText = isLocked ? '🔒' : '🔓';
-        saveData();
-    }
-
-    function triggerEnd(id) { 
-        const card = document.getElementById(`card-${id}`);
-        clearInterval(songCountdowns[id]); 
-        document.getElementById(`start-btn-${id}`).classList.remove('running'); 
-        document.getElementById(`end-btn-${id}`).classList.add('ended'); 
-        if (actualStartTimes[id] && !card.classList.contains('is-locked')) { 
-            const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000);
-            card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0');
-            card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0');
-        } 
-        recalculateAll(); saveData(); 
+    function recalculateAll() {
+        const cards = document.querySelectorAll('.cue-card'); 
+        let rollingStartTime = null, foundActive = false, finalEndTime = null;
+        let counters = { song: 0, talking: 0, vcr: 0, other: 0 };
+        const prefix = { song: 'S', talking: 'T', vcr: 'V', other: 'O' };
+        cards.forEach((card) => {
+            const id = card.id.replace('card-', '');
+            const type = card.getAttribute('data-type');
+            const isSkipped = card.classList.contains('is-skipped');
+            if (!isSkipped) { counters[type]++; card.querySelector('.index-label').innerText = `${prefix[type]}-${counters[type]}`; } else { card.querySelector('.index-label').innerText = `--`; }
+            const dSec = isSkipped ? 0 : (parseInt(card.querySelector('.min-input').value || 0) * 60 + parseInt(card.querySelector('.sec-input').value || 0));
+            const sTag = card.querySelector('.start-tag'); const eTag = card.querySelector('.end-tag');
+            if (card.classList.contains('active') && actualStartTimes[id]) { 
+                rollingStartTime = new Date(actualStartTimes[id].getTime() + dSec * 1000); foundActive = true; 
+                sTag.innerText = "S: " + actualStartTimes[id].toTimeString().split(' ')[0]; eTag.innerText = "E: " + rollingStartTime.toTimeString().split(' ')[0]; 
+            } else if (foundActive) { 
+                sTag.innerText = "S: " + rollingStartTime.toTimeString().split(' ')[0]; 
+                const endTime = new Date(rollingStartTime.getTime() + dSec * 1000); 
+                eTag.innerText = "E: " + endTime.toTimeString().split(' ')[0]; 
+                rollingStartTime = endTime; finalEndTime = endTime; 
+            }
+        });
+        if (finalEndTime) {
+            const target = new Date(); const [h, m] = document.getElementById('target-end-time').value.split(':'); target.setHours(parseInt(h), parseInt(m), 0, 0);
+            const diff = finalEndTime - target; const off = document.getElementById('offset-display');
+            if(diff > 0) { off.innerText = `Delay: -${Math.floor(diff/60000)}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; off.style.color = "var(--red)"; } else { off.innerText = "Safe"; off.style.color = "var(--green)"; }
+        }
     }
 
     function startCountdown(id) {
@@ -211,10 +253,9 @@
         const noteText = card.querySelector('.cue-note').value;
         const timePattern = /(\d{1,2})[:'"](\d{2})\s*([^\s\n\r，。,]+)?/g; 
         let cuePoints = []; let match;
-        while ((match = timePattern.exec(noteText)) !== null) { 
-            cuePoints.push({ targetSec: parseInt(match[1]) * 60 + parseInt(match[2]), desc: (match[3] || "CUE") }); 
-        }
+        while ((match = timePattern.exec(noteText)) !== null) { cuePoints.push({ targetSec: parseInt(match[1]) * 60 + parseInt(match[2]), desc: (match[3] || "CUE") }); }
         songCountdowns[id] = setInterval(() => {
+            if(!actualStartTimes[id]) return;
             const m = parseInt(card.querySelector('.min-input').value || 0);
             const s = parseInt(card.querySelector('.sec-input').value || 0);
             const totalSecs = m * 60 + s;
@@ -222,41 +263,19 @@
             let left = totalSecs - elapsed;
             mainCd.innerText = (left < 0 ? "-" : "") + `${Math.floor(Math.abs(left)/60).toString().padStart(2, '0')}:${(Math.abs(left)%60).toString().padStart(2, '0')}`;
             mainCd.style.color = left < 0 ? "var(--red)" : (left <= 10 ? "var(--warning)" : "#fff");
-            let cueHtml = "";
-            cuePoints.forEach(cp => {
-                let d = cp.targetSec - elapsed;
-                if (d > 0) cueHtml += `<div style="margin-top:5px;"><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`;
-            });
-            cueContainer.innerHTML = cueHtml;
+            let cueHtml = ""; cuePoints.forEach(cp => { let d = cp.targetSec - elapsed; if (d > 0) cueHtml += `<div style="margin-top:5px;"><span class="cue-big-num">${Math.floor(d/60)}:${(d%60).toString().padStart(2,'0')}</span></div>`; }); cueContainer.innerHTML = cueHtml;
             recalculateAll();
         }, 1000);
     }
 
-    function recalculateAll() {
-        const cards = document.querySelectorAll('.cue-card'); 
-        let rollingStartTime = null, foundActive = false, finalEndTime = null;
-        let counters = { song: 0, talking: 0, vcr: 0, other: 0 };
-        const prefix = { song: 'S', talking: 'T', vcr: 'V', other: 'O' };
-        cards.forEach((card) => {
-            const id = card.id.replace('card-', '');
-            const isSkipped = card.classList.contains('is-skipped');
-            if (!isSkipped) { counters[card.getAttribute('data-type')]++; card.querySelector('.index-label').innerText = `${prefix[card.getAttribute('data-type')]}-${counters[card.getAttribute('data-type')]}`; }
-            const dSec = isSkipped ? 0 : (parseInt(card.querySelector('.min-input').value || 0) * 60 + parseInt(card.querySelector('.sec-input').value || 0));
-            const sTag = card.querySelector('.start-tag'); const eTag = card.querySelector('.end-tag');
-            if (card.classList.contains('active')) { rollingStartTime = new Date(actualStartTimes[id].getTime() + dSec * 1000); foundActive = true; sTag.innerText = "S: " + actualStartTimes[id].toTimeString().split(' ')[0]; eTag.innerText = "E: " + rollingStartTime.toTimeString().split(' ')[0]; }
-            else if (foundActive) { sTag.innerText = "S: " + rollingStartTime.toTimeString().split(' ')[0]; const endTime = new Date(rollingStartTime.getTime() + dSec * 1000); eTag.innerText = "E: " + endTime.toTimeString().split(' ')[0]; rollingStartTime = endTime; finalEndTime = endTime; }
-        });
-        if (finalEndTime) {
-            const target = new Date(); const [h, m] = document.getElementById('target-end-time').value.split(':'); target.setHours(h, m, 0, 0);
-            const diff = finalEndTime - target; const off = document.getElementById('offset-display');
-            if(diff > 0) { off.innerText = `Delay: -${Math.floor(diff/60000)}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; off.style.color = "var(--red)"; } else { off.innerText = "Safe"; off.style.color = "var(--green)"; }
-        }
-    }
-
-    function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
-    function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; saveData(); }
+    function exportData() { saveData(); const data = localStorage.getItem(CURRENT_STORAGE_KEY); const blob = new Blob([data], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `concert_cue_${new Date().getMonth()+1}${new Date().getDate()}.json`; a.click(); }
+    function importData(event) { const file = event.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(e) { try { JSON.parse(e.target.result); if (confirm("確定匯入覆蓋嗎？")) { localStorage.setItem(CURRENT_STORAGE_KEY, e.target.result); location.reload(); } } catch (err) { alert("格式錯誤！"); } }; reader.readAsText(file); }
     function triggerStart(btn, id) { if (lastActiveId && lastActiveId != id) triggerEnd(lastActiveId); lastActiveId = id; actualStartTimes[id] = new Date(); document.querySelectorAll('.cue-card').forEach(c => c.classList.remove('active')); document.getElementById(`card-${id}`).classList.add('active'); btn.classList.add('running'); startCountdown(id); recalculateAll(); }
-    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(h, m, 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
+    function triggerEnd(id) { const card = document.getElementById(`card-${id}`); clearInterval(songCountdowns[id]); document.getElementById(`start-btn-${id}`).classList.remove('running'); document.getElementById(`end-btn-${id}`).classList.add('ended'); if (actualStartTimes[id] && !card.classList.contains('is-locked')) { const totalSecs = Math.floor((new Date() - actualStartTimes[id]) / 1000); card.querySelector('.min-input').value = Math.floor(totalSecs / 60).toString().padStart(2, '0'); card.querySelector('.sec-input').value = (totalSecs % 60).toString().padStart(2, '0'); } recalculateAll(); saveData(); }
+    function updateClock() { const now = new Date(); document.getElementById('current-time').innerText = now.toTimeString().split(' ')[0]; const targetStr = document.getElementById('target-end-time').value; if (targetStr) { const [h, m] = targetStr.split(':'); const target = new Date(); target.setHours(parseInt(h), parseInt(m), 0, 0); if (target < now && (now - target) < 43200000) {} else if (target < now) { target.setDate(target.getDate() + 1); } const diff = target - now; const cd = document.getElementById('countdown'); if (diff > 0) { cd.innerText = `${Math.floor(diff/3600000).toString().padStart(2,'0')}:${Math.floor((diff%3600000)/60000).toString().padStart(2,'0')}:${Math.floor((diff%60000)/1000).toString().padStart(2,'0')}`; } else { cd.innerText = "OVER TIME"; } } }
+    function toggleGlobalSort() { globalSortEnabled = !globalSortEnabled; if(sortInstance) sortInstance.option("disabled", !globalSortEnabled); document.body.classList.toggle('can-sort', globalSortEnabled); document.getElementById('sort-icon').innerText = globalSortEnabled ? '🔓' : '🔒'; }
+    function initSortable() { const el = document.getElementById('cue-list'); if (sortInstance) sortInstance.destroy(); sortInstance = Sortable.create(el, { animation: 150, handle: '.drag-handle', disabled: true, onEnd: () => { recalculateAll(); saveData(); } }); }
+    function toggleLock(id) { const card = document.getElementById(`card-${id}`); const isLocked = card.classList.toggle('is-locked'); card.querySelectorAll('.time-input-box, .time-select-trigger').forEach(el => el.disabled = isLocked); document.getElementById(`lock-btn-${id}`).innerText = isLocked ? '🔒' : '🔓'; saveData(); }
     function updateCardType(id, type) { document.getElementById(`card-${id}`).setAttribute('data-type', type); saveData(); }
     function autoGrow(el) { el.style.height = "5px"; el.style.height = (el.scrollHeight) + "px"; }
     function manualSave() { saveData(); const btn = document.getElementById('save-hint-btn'); btn.innerText = "SAVED!"; setTimeout(() => btn.innerText = "SAVE", 1500); }
@@ -264,7 +283,7 @@
     function removeRow(id) { if(confirm("確定刪除？")) { document.getElementById(`card-${id}`).remove(); recalculateAll(); saveData(); } }
     function toggleSkip(id) { document.getElementById(`card-${id}`).classList.toggle('is-skipped'); recalculateAll(); saveData(); }
     function saveData() { const data = { title: document.getElementById('main-title').value, target: document.getElementById('target-end-time').value, items: [] }; document.querySelectorAll('.cue-card').forEach(card => { const id = card.id.replace('card-', ''); data.items.push({ id: id, name: card.querySelector('.cue-name').value, type: card.getAttribute('data-type'), duration: `${card.querySelector('.min-input').value}:${card.querySelector('.sec-input').value}`, note: card.querySelector('.cue-note').value, locked: card.classList.contains('is-locked'), skipped: card.classList.contains('is-skipped') }); }); localStorage.setItem(CURRENT_STORAGE_KEY, JSON.stringify(data)); }
-    function loadData() { const list = document.getElementById('cue-list'); list.innerHTML = ""; let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v46'); if (raw) { const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target; data.items.forEach(item => addRow(item)); } else { for(let i=0; i<5; i++) addRow(); } initSortable(); }
+    function loadData() { const list = document.getElementById('cue-list'); list.innerHTML = ""; let raw = localStorage.getItem(CURRENT_STORAGE_KEY) || localStorage.getItem('concert_app_v49'); if (raw) { const data = JSON.parse(raw); document.getElementById('main-title').value = data.title; document.getElementById('target-end-time').value = data.target; data.items.forEach(item => addRow(item)); } else { for(let i=0; i<5; i++) addRow(); } initSortable(); }
     window.onload = loadData;
 </script>
 </body>
